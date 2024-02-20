@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "imdb-sentiment-analysis"
+version = "0.1.0"
+description = "Training models for IMDB Sentiment Analysis"
+authors = ["Kolosov Ihor <108092986+Ak1yamaKiyoshi@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+scikit-learn = "^1.4.1.post1"
+transformers = {extras = ["torch"], version = "^4.37.2"}
+pynvml = "^11.5.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
