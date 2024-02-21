@@ -94,7 +94,7 @@ train_args = TrainingArguments(
     optim="adafactor",  # for performace purposes
     learning_rate=2e-5,
     max_grad_norm=0.3,
-    num_train_epochs=5,
+    num_train_epochs=9,
     # use_cpu=True,
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
@@ -105,6 +105,9 @@ train_args = TrainingArguments(
     tf32=True,  #! Kinda scary
 )
 #! Todo: use deepspeed
+#! Todo: log predictions and eval to tensorboard
+#! Todo: upload model to huggingface
+#! todo: Population Based Training
 
 trainer = Trainer(
     model=model,
