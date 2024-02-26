@@ -2,7 +2,7 @@ from datetime import datetime
 
 class Config:
 
-    @classmethod
+    @staticmethod
     def output_dir(model_name:str, details:str, dataset_name:str, directory:str="./checkpoints/") -> str:
         dataset = dataset_name.split("/")[-1]
         model = model_name.split("/")[-1]

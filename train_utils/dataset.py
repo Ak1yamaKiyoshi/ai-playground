@@ -8,16 +8,6 @@ import logging
 def invert_dict(to_invert_:Dict) -> Dict:
     return {v: k for k, v in to_invert_.items()}
 
-def get_huggingface_splitted_datasets(cls, tokenizer, name):
-    try:
-        dataset = load_dataset(name)
-        train_raw, val_raw, pred_raw = (dataset["train"], dataset["test"], dataset["unsupervised"])
-        output = (cls(tokenizer, ds) for ds in [train_raw, val_raw, pred_raw])
-    except Exception as e:
-        logging.error(f"{e}")
-    logging.info(f"{name[0].upper()}{name[0:]} splits loaded ")
-    return output
-
 
 class Dataset:
     def __init__(self,
@@ -29,7 +19,7 @@ class Dataset:
         self.iterable_dataset = iterable_dataset
         self.max_len = max_len
 
-    def __getitem__(self, index) -> Dict[str]:
+    def __getitem__(self, index):
         label = self.iterable_dataset[index]["label"]
         text = self.iterable_dataset[index]["text"]
         outputs = self.tokenizer(
