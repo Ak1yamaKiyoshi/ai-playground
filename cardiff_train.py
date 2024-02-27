@@ -2,26 +2,43 @@ from train_utils import (CardiffTwitterSentimentDataset, compute_metrics)
 from transformers import (AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer)
 from utils import print_gpu_utilization
 from datasets import load_dataset
+from peft import get_peft_model, PeftModel
 from train_config.config import Config
-import evaluate
 import logging
 import sys
 import os
 
+
 def get_huggingface_splitted_datasets(cls, tokenizer, dataset_name, label2id):
     dataset_dict = load_dataset(dataset_name)
     """ 
-    ['test_2020', 'test_2021', 'train_2020', 'train_2021', 'train_all',
-    'validation_2020', 'validation_2021', 'train_random', 'validation_random', 
-    'test_coling2022_random', 'train_coling2022_random', 'test_coling2022', 'train_coling2022']
+        ['test_2020', 'test_2021', 'train_2020', 'train_2021', 'train_all',
+        'validation_2020', 'validation_2021', 'train_random', 'validation_random', 
+        'test_coling2022_random', 'train_coling2022_random', 'test_coling2022', 'train_coling2022']
     """
     return (cls(dataset_dict['train_all'], tokenizer, label2id),
-            cls(dataset_dict['validation_random'], tokenizer, label2id)
+            cls(dataset_dict['test_coling2022'], tokenizer, label2id)
     )
+
+def get_test_datasets(cls, tokenizer, dataset_name, label2id):
+    dataset_dict = load_dataset(dataset_name)
+    return (cls(dataset_dict[name], tokenizer, label2id) for name in ["test_coling2022", "test_2020", "test_2021"])
 
 logging.basicConfig(
     level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stdout
 )
+
+dataset_name = "cardiffnlp/tweet_topic_single"
+model_name = "bert-base-cased"
+output_dict = {
+    "model_name":model_name,
+    "dataset_name":dataset_name,
+    "details":"",
+}
+
+output_dir = Config.output_dir(**output_dict)
+log_dir = Config.log_dir(**output_dict)
+adapter_name = Config.adapter_name(**output_dict)
 
 label2id = {
     "arts_&_culture": 0,
@@ -32,45 +49,55 @@ label2id = {
     "science_&_technology": 5
 }
 
-metric = evaluate.load("accuracy")
-dataset_name = "cardiffnlp/tweet_topic_single"
-model_name = "bert-base-cased"
+logging.info(f"Output dir: {output_dir}\n Logging_dir {log_dir}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=6)
-model.to("cuda")
+
+peft_model = get_peft_model(model, Config.lora(), adapter_name)
+peft_model.print_trainable_parameters()
+peft_model.to("cuda")
+
+# Unfrozing lora layers 
+for name, param in peft_model.named_parameters():
+    if 'lora' in name:
+        param.requires_grad = True
+        logging.info(f"Unfrozen: {name}")
 
 train_ds, val_ds = get_huggingface_splitted_datasets(
     CardiffTwitterSentimentDataset,tokenizer, dataset_name, label2id)
 
 print_gpu_utilization("Model Loading")
 
+params = {
+    "num_train_epochs":1,
+    "logging_steps":10,
+    "optim":"adafactor", 
+    "group_by_length":True,
+    "learning_rate":2e-5,
+    "max_grad_norm":0.3,
+    "per_device_train_batch_size":4,
+    "per_device_eval_batch_size":4,
+    "gradient_accumulation_steps":2,
+    "gradient_checkpointing":True,
+    "fp16":True,
+    "tf32":True,
+    "metric_for_best_model":"f1",
+}
+
 train_args = TrainingArguments(
-    output_dir=Config.output_dir(model_name, "", dataset_name),
-    logging_dir="./logs"+Config.output_dir(model_name, "", dataset_name),
-    logging_steps=10,
+    output_dir=output_dir,
+    logging_dir=log_dir,
+    report_to=["tensorboard"],
     evaluation_strategy="epoch",
-    optim="adafactor", 
-    group_by_length=True,
-    learning_rate=2e-5,
-    max_grad_norm=0.3,
-    num_train_epochs=45,
-    per_device_train_batch_size=4,
-    per_device_eval_batch_size=4,
-    gradient_accumulation_steps=4,
-    gradient_checkpointing=True,
-    fp16=True, 
-    tf32=True,
-    # use_cpu=True,
+    **params
 )
 
-train_args_dict = vars(train_args)
-train_args_filepath = Config.output_dir(model_name, "", dataset_name)+"/stats/train_args.json"
-os.makedirs('/'.join(train_args_filepath.split("/")[:-1]), exist_ok=True)
-with open(train_args_filepath, "w") as f:
-    f.write(str(train_args_dict))
-
-logging.info(f"Training args dumped as dict at: {train_args_filepath}")
+params_path = output_dir + "/training-params-custom.txt"
+os.makedirs(output_dir, exist_ok=True)
+with open(params_path, "w") as f:
+    f.write(str(params))
+logging.info(f"Training args saved at: {params_path}")
 
 trainer = Trainer(
     model=model,
@@ -84,3 +111,11 @@ logging.info("All set up, running model train... ")
 trainer.train()
 
 # https://huggingface.co/datasets/cardiffnlp/tweet_topic_single
+# Hyperparameter search reference: 
+# https://github.com/huggingface/notebooks/blob/main/examples/text_classification.ipynb
+# PEFT lora
+# https://jaotheboss.medium.com/peft-with-bert-8763d8b8a4ca
+# LORA more detailed guide 
+# https://huggingface.co/docs/peft/main/en/conceptual_guides/lora
+# When to use LoRA 
+# https://crunchingthedata.com/when-to-use-lora/#:~:text=LoRA%20is%20a%20model%20fine,parameters%20that%20are%20not%20frozen.
