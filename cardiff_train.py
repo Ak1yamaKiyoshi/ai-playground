@@ -38,7 +38,7 @@ output_dict = {
     "details":f"{'lora' if train_with_lora else 'base'}",
 }
 params = {
-    "num_train_epochs":50,
+    "num_train_epochs":15,
     "logging_steps":10,
     "optim":"adafactor",
     "group_by_length":True,
@@ -81,7 +81,7 @@ if train_with_lora:
             param.requires_grad = True
             logging.info(f"Unfrozen: {name}")
 else:
-    model.to_cuda()
+    model.to("cuda")
 
 train_ds, val_ds = get_huggingface_splitted_datasets(
     CardiffTwitterSentimentDataset,tokenizer, dataset_name, label2id)
