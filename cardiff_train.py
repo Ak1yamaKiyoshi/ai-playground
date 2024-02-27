@@ -1,12 +1,14 @@
 from train_utils import (CardiffTwitterSentimentDataset, compute_metrics)
-from transformers import (AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer)
+from transformers import (AutoConfig, AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer)
 from utils import print_gpu_utilization
 from datasets import load_dataset
 from peft import get_peft_model, PeftModel
 from train_config.config import Config
 import logging
+import torch
 import sys
 import os
+import safetensors
 
 
 def get_huggingface_splitted_datasets(cls, tokenizer, dataset_name, label2id):
@@ -31,7 +33,11 @@ logging.basicConfig(
 
 dataset_name = "cardiffnlp/tweet_topic_single"
 model_name = "bert-base-cased"
-train_with_lora = False
+train_with_lora = True
+load_from_checkpoint = True
+checkpoint_name = "./output/checkpoints/tweet_topic_single-bert-base-cased-base-(2024-02-27)-(14:21:32)/checkpoint-8000/model.safetensors"
+checkpoint_model_config = "./output/checkpoints/tweet_topic_single-bert-base-cased-base-(2024-02-27)-(14:21:32)/checkpoint-8000/config.json"
+
 output_dict = {
     "model_name":model_name,
     "dataset_name":dataset_name,
@@ -70,6 +76,9 @@ logging.info(f"Output dir: {output_dir}\n Logging_dir {log_dir}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=6)
+
+if load_from_checkpoint:
+    safetensors.torch.load_model(model, checkpoint_name)
 
 if train_with_lora:
     peft_model = get_peft_model(model, Config.lora(), adapter_name)
