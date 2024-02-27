@@ -4,7 +4,7 @@ from datetime import datetime
 class Config:
     @staticmethod
     def log_dir(**params):
-        params["directory"] = params.get("directory", "./output/logs")
+        params["directory"] = params.get("directory", "./output/logs/")
         return Config.output_dir(**params)
     
     @staticmethod

@@ -23,17 +23,34 @@ def get_huggingface_splitted_datasets(cls, tokenizer, dataset_name, label2id):
 def get_test_datasets(cls, tokenizer, dataset_name, label2id):
     dataset_dict = load_dataset(dataset_name)
     return (cls(dataset_dict[name], tokenizer, label2id) for name in ["test_coling2022", "test_2020", "test_2021"])
-
+    
 logging.basicConfig(
     level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stdout
 )
 
+
 dataset_name = "cardiffnlp/tweet_topic_single"
 model_name = "bert-base-cased"
+train_with_lora = False
 output_dict = {
     "model_name":model_name,
     "dataset_name":dataset_name,
-    "details":"",
+    "details":f"{'lora' if train_with_lora else 'base'}",
+}
+params = {
+    "num_train_epochs":50,
+    "logging_steps":10,
+    "optim":"adafactor",
+    "group_by_length":True,
+    "learning_rate":2e-5,
+    "max_grad_norm":0.3,
+    "per_device_train_batch_size":4,
+    "per_device_eval_batch_size":4,
+    "gradient_accumulation_steps":2,
+    "gradient_checkpointing":True,
+    "fp16":True,
+    "tf32":True,
+    "metric_for_best_model":"f1",
 }
 
 output_dir = Config.output_dir(**output_dict)
@@ -54,36 +71,22 @@ logging.info(f"Output dir: {output_dir}\n Logging_dir {log_dir}")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=6)
 
-peft_model = get_peft_model(model, Config.lora(), adapter_name)
-peft_model.print_trainable_parameters()
-peft_model.to("cuda")
+if train_with_lora:
+    peft_model = get_peft_model(model, Config.lora(), adapter_name)
+    peft_model.print_trainable_parameters()
+    peft_model.to("cuda")
 
-# Unfrozing lora layers 
-for name, param in peft_model.named_parameters():
-    if 'lora' in name:
-        param.requires_grad = True
-        logging.info(f"Unfrozen: {name}")
+    for name, param in peft_model.named_parameters():
+        if 'lora' in name:
+            param.requires_grad = True
+            logging.info(f"Unfrozen: {name}")
+else:
+    model.to_cuda()
 
 train_ds, val_ds = get_huggingface_splitted_datasets(
     CardiffTwitterSentimentDataset,tokenizer, dataset_name, label2id)
 
 print_gpu_utilization("Model Loading")
-
-params = {
-    "num_train_epochs":1,
-    "logging_steps":10,
-    "optim":"adafactor", 
-    "group_by_length":True,
-    "learning_rate":2e-5,
-    "max_grad_norm":0.3,
-    "per_device_train_batch_size":4,
-    "per_device_eval_batch_size":4,
-    "gradient_accumulation_steps":2,
-    "gradient_checkpointing":True,
-    "fp16":True,
-    "tf32":True,
-    "metric_for_best_model":"f1",
-}
 
 train_args = TrainingArguments(
     output_dir=output_dir,
