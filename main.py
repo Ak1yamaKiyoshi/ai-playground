@@ -9,7 +9,7 @@ logs = find_files(path_to_logs, "events.out")
 
 for log in logs:
     df = tflog2pandas(log)
-    print(df.columns)
+    print(df.sample(5))
     #! Load params file from these directories .split("/")[:-1]
     #! and merge them somehow 
 

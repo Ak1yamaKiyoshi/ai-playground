@@ -7,7 +7,11 @@ from train_config.config import Config
 import logging
 import sys
 import os
-import safetensors
+import warnings
+
+warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 def get_test_datasets(cls, tokenizer, dataset_name, label2id):
     dataset_dict = load_dataset(dataset_name)
@@ -44,7 +48,7 @@ label2id = {
 }
 
 def construct_details(lora, optimizer, batchsize):
-    return f"bench-{'lora-' if lora else ''}{optimizer.replace('_','-')}-batch-{batch_size}"
+    return f"bench-1-{'lora-' if lora else ''}{optimizer.replace('_','-')}-batch-{batchsize}"
 
 dataset_name = "cardiffnlp/tweet_topic_single"
 model_name = "bert-base-cased"
@@ -111,38 +115,45 @@ def train(params, use_lora):
     trainer.train()
 
 
+trained_with_grad_steps_2_and_grad_norm_03 = [
+    "paged_adamw_32bit", 
+    "adamw_torch_fused",    
+    "adamw_hf",
+]
 optimizers_to_test = [
     "paged_adamw_32bit", 
-    "adamw_torch_fused",
-    "adagrad",
+    "adamw_torch_fused",    
     "adamw_hf",
-    "adamw_torch",
-    "adamw_bnb_8bit",
+    "adafactor", # no data in bench 1
+    "adamw_bnb_8bit", # no data in bench 1 
 ]
-
-batch_sizes = [
-    32, 16, 8, 4, 2
-]
+batch_sizes = [32, 16, 8 ]
+grad_accumulation_steps = [1, 2,]
+grad_norms = [0.1, 0.2, 0.3]
 
 for optimizer in optimizers_to_test:
     for batch_size in batch_sizes:
-        if optimizer == "paged_adamw_32bit" and batch_size != 2:
-           continue
-        else:
-            params = {
-                "num_train_epochs":5,
-                "logging_steps":10,
-                "optim": optimizer,
-                "group_by_length":True,
-                "learning_rate":2e-5,
-                "max_grad_norm":0.3,
-                "per_device_train_batch_size":batch_size,
-                "per_device_eval_batch_size":1,
-                "gradient_accumulation_steps":2,
-                "gradient_checkpointing":True,
-                "fp16":True,
-                "tf32":True,
-                "metric_for_best_model":"f1",
-            }
-            try: train(params, False)
-            except: continue
+        for gradaccumsteps in grad_accumulation_steps:
+            if gradaccumsteps == 2 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
+                continue
+            for grad_norm in grad_norms:
+                if grad_norms == 0.3 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
+                    continue
+                params = {
+                    "num_train_epochs":5,
+                    "logging_steps":10,
+                    "optim": optimizer,
+                    "group_by_length":True,
+                    "learning_rate":2e-5,
+                    "max_grad_norm":grad_norms,
+                    "per_device_train_batch_size":batch_size,
+                    "per_device_eval_batch_size":1,
+                    "gradient_accumulation_steps":gradaccumsteps,
+                    "gradient_checkpointing":True,
+                    "fp16":True,
+                    "tf32":True,
+                    "metric_for_best_model":"f1",
+                }
+                try:
+                    train(params, False)
+                except: continue
