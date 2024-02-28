@@ -38,19 +38,19 @@ logging.basicConfig(
 dataset_name = "cardiffnlp/tweet_topic_single"
 model_name = "bert-base-cased"
 
-train_with_lora = False
+train_with_lora = True
 load_from_checkpoint = False
 checkpoint_name = "./output/checkpoints/tweet_topic_single-bert-base-cased-base-(2024-02-27)-(14:21:32)/checkpoint-1000/model.safetensors"
 checkpoint_model_config = "./output/checkpoints/tweet_topic_single-bert-base-cased-base-(2024-02-27)-(14:21:32)/checkpoint-1000/config.json"
 
 params = {
-    "num_train_epochs":15,
+    "num_train_epochs":4,
     "logging_steps":10,
-    "optim": "adamw_bnb_8bit", #"paged_adamw_32bit",#"adamw_torch_fused", #"adagrad", #"adamw_hf", #"adamw_torch",
+    "optim": "paged_adamw_32bit", #"adamw_torch", #"adamw_bnb_8bit", #"paged_adamw_32bit",#"adamw_torch_fused", #"adagrad", #"adamw_hf", #"adamw_torch",
     "group_by_length":True,
     "learning_rate":2e-5,
     "max_grad_norm":0.3,
-    "per_device_train_batch_size":4,
+    "per_device_train_batch_size":8,
     "per_device_eval_batch_size":1,
     "gradient_accumulation_steps":2,
     "gradient_checkpointing":True,
@@ -94,7 +94,7 @@ if train_with_lora:
     peft_model.to("cuda")
 
     for name, param in peft_model.named_parameters():
-        if 'lora' in name:
+        if 'lora' in name and 'classifier' not in name:
             param.requires_grad = True
             logging.info(f"Unfrozen: {name}")
 else:

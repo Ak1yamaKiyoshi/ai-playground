@@ -23,12 +23,12 @@ class Config:
     def lora():
         return LoraConfig(
             r=16,
-            lora_alpha=2,
+            lora_alpha=1,
             target_modules=["query", "value"],
-            lora_dropout=0.05,
+            lora_dropout=0.01,
             bias="none",
             task_type=TaskType.SEQ_CLS,
-            inference_mode=True
+            inference_mode=False
         )
 
     @staticmethod
