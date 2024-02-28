@@ -7,8 +7,10 @@ from train_config.config import Config
 import logging
 import sys
 import os
-import warnings
+import warnings 
+from transformers import logging as tlogging
 
+tlogging.set_verbosity_error()
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -65,10 +67,10 @@ def train(params, use_lora):
     log_dir = Config.log_dir(**output_dict)
     adapter_name = Config.adapter_name(**output_dict)
 
-    logging.info(f"Output dir: {output_dir}\n Logging_dir {log_dir}")
+    logging.info(f"Output dir: {output_dir}\nINFO: Logging_dir {log_dir}")
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=6)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=6, trust_remote_code=True)
 
     if train_with_lora:
         peft_model = get_peft_model(model, Config.lora(), adapter_name)
@@ -81,6 +83,9 @@ def train(params, use_lora):
                 logging.info(f"Unfrozen: {name}")
     else:
         model.to("cuda")
+    
+    logging.info(f"\033[92m{output_dir.split('/')[-1]}\033[0m")
+    logging.info(f"\033[94m{params}\033[0m")
     
     train_ds, val_ds = get_huggingface_splitted_datasets(
         CardiffTwitterSentimentDataset,tokenizer, dataset_name, label2id)
@@ -111,9 +116,7 @@ def train(params, use_lora):
     os.makedirs(log_dir, exist_ok=True)
     with open(f"{log_dir}/memory_usage.txt", "w+") as f:
         f.write(usage)
-
     trainer.train()
-
 
 trained_with_grad_steps_2_and_grad_norm_03 = [
     "paged_adamw_32bit", 
@@ -131,29 +134,35 @@ batch_sizes = [32, 16, 8 ]
 grad_accumulation_steps = [1, 2,]
 grad_norms = [0.1, 0.2, 0.3]
 
-for optimizer in optimizers_to_test:
-    for batch_size in batch_sizes:
-        for gradaccumsteps in grad_accumulation_steps:
-            if gradaccumsteps == 2 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
-                continue
-            for grad_norm in grad_norms:
-                if grad_norms == 0.3 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
+i = 0
+while True:
+    for optimizer in optimizers_to_test:
+        for batch_size in batch_sizes:
+            for gradaccumsteps in grad_accumulation_steps:
+                if gradaccumsteps == 2 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
                     continue
-                params = {
-                    "num_train_epochs":5,
-                    "logging_steps":10,
-                    "optim": optimizer,
-                    "group_by_length":True,
-                    "learning_rate":2e-5,
-                    "max_grad_norm":grad_norms,
-                    "per_device_train_batch_size":batch_size,
-                    "per_device_eval_batch_size":1,
-                    "gradient_accumulation_steps":gradaccumsteps,
-                    "gradient_checkpointing":True,
-                    "fp16":True,
-                    "tf32":True,
-                    "metric_for_best_model":"f1",
-                }
-                try:
-                    train(params, False)
-                except: continue
+                for grad_norm in grad_norms:
+                    if grad_norms == 0.3 and optimizer in trained_with_grad_steps_2_and_grad_norm_03:
+                        continue
+                    i+=1 
+                    params = {
+                        "num_train_epochs":5,
+                        "logging_steps":10,
+                        "optim": optimizer,
+                        "group_by_length":True,
+                        "learning_rate":2e-5,
+                        "max_grad_norm":grad_norms,
+                        "per_device_train_batch_size":batch_size,
+                        "per_device_eval_batch_size":1,
+                        "gradient_accumulation_steps":gradaccumsteps,
+                        "gradient_checkpointing":True,
+                        "fp16":True,
+                        "tf32":True,
+                        "metric_for_best_model":"f1",
+                    }
+                    try:
+                        train(params, False)
+                    except: 
+                        logging.info("Skipped iteration")
+                        continue
+                    logging.info(i)
