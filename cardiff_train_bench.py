@@ -126,6 +126,9 @@ batch_sizes = [
 
 for optimizer in optimizers_to_test:
     for batch_size in batch_sizes:
+        if optimizer == "paged_adamw_32bit" and batch_size != 2:
+           continue
+        else:
             params = {
                 "num_train_epochs":5,
                 "logging_steps":10,
