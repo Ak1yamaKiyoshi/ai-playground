@@ -1,0 +1,1 @@
+{'num_train_epochs': 5, 'logging_steps': 10, 'optim': 'paged_adamw_32bit', 'group_by_length': True, 'learning_rate': 2e-05, 'max_grad_norm': [0.1, 0.2, 0.3], 'per_device_train_batch_size': 32, 'per_device_eval_batch_size': 1, 'gradient_accumulation_steps': 1, 'gradient_checkpointing': True, 'fp16': True, 'tf32': True, 'metric_for_best_model': 'f1'}
