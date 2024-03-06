@@ -41,27 +41,34 @@ class MLP:
         n_output_nodes = y.shape[1]
         
         self.weights_hidden = []
+        self.biases_hidden = []
         prev_features = n_features
         for n_nodes in hidden_layers:
             weight = np.random.rand(prev_features, n_nodes)
             self.weights_hidden.append(weight)
+            self.biases_hidden.append(np.zeros(n_nodes))
             prev_features = n_nodes
-        
+            
+        self.bias_output = np.zeros(n_output_nodes)
         self.weights_outputs = np.random.rand(prev_features, n_output_nodes)
         return self
 
 
     def backpropagation(self, X, y):
         X = np.array(X)
+        y = np.array(y)
 
-        prev_inputs = X
-        for layer in self.weights_hidden:
-            layer_inputs = prev_inputs @ layer
-            layer_outputs = self.activation_function(layer_inputs)
-            prev_inputs = layer_outputs
+        predicted = self.predict(X)
+        loss = self.loss_function(y, predicted)
 
-        output_inputs = prev_inputs @ self.weights_outputs
-        outputs = self.activation_function(output_inputs)
+        dL = y - predicted 
+        self.activation_function.df(predicted)
+
+        for weight, bias in list(zip(self.weights_hidden, self.biases_hidden))[::-1]:
+            # weight -= partial derrivative of loss function in respect of weights * learning rate  
+            # bias -= partial derrivative of loss function in respect of bias * learning rate 
+            pass
+        #print(outputs, loss)
 
 
     def predict(self, X):
@@ -85,4 +92,4 @@ def get_datasets(path="./data.csv"):
     y = df['label']
     return train_test_split(X, y, train_size=0.8)
 
-print(MLP().fit([[0, 0], [1, 0], [0, 1]], [[0], [1], [1]]).predict([[1, 0]]))
+print(MLP().fit([[0, 0], [1, 0], [0, 1]], [[0], [1], [1]]).backpropagation([[1, 0]], [[1]]))
