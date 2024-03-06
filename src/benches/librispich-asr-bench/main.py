@@ -9,8 +9,17 @@ dataset = load_dataset('librispeech_asr')
 
 
 
+#!
+#!
+#!
+#!
+#!
+
+
 
 # research 
 # whishper 3 
 ## https://huggingface.co/openai/whisper-large-v3/discussions/83
-# https://github.com/egorsmkv/speech-recognition-uk?tab=readme-ov-file#whisper
+## https://github.com/egorsmkv/speech-recognition-uk?tab=readme-ov-file#whisper
+#
+## https://huggingface.co/blog/fine-tune-w2v2-bert
