@@ -136,7 +136,11 @@ def fibonacci(n):
 }```""", 
 """run_calc_total.js"""),
         ]
-        
+    
+    class Summary:
+        system_message = """You are an expert at summarizing code into a single line. Given a block of code, your task is to provide a concise one-line summary that captures the main functionality or purpose of the code."""
+        prompt = """Summarize the provided code block into a single line. The summary should be concise and capture the main functionality or purpose of the code. It should be clear and easy to understand, providing a high-level overview of the code's functionality. """
+        shots = []    
 
     class Debugger:
         system_message = """debugger system_message"""
@@ -145,6 +149,7 @@ def fibonacci(n):
             ("""debuget shot0 in""", """debuget shot0 out"""),
             ("""debuget shot1 in""", """debuget shot1 out"""),
         ]
+    
     
     class Consoler:
         system_message = """ """

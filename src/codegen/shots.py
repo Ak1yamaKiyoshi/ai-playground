@@ -45,6 +45,7 @@ class PredefinedShot(Shot):
         code_debug = "debug"
         console_action = "action"
         namer = "namer"
+        summary ="summary"
     
     def __init__(self, shot_type:str) -> None:
         if shot_type == self.Avaiavable.code_generate:
@@ -55,6 +56,8 @@ class PredefinedShot(Shot):
             super().__init__(ShotConfig.Consoler.shots, ShotConfig.Consoler.system_message, ShotConfig.Consoler.prompt)
         elif shot_type == self.Avaiavable.namer:
             super().__init__(ShotConfig.Namer.shots, ShotConfig.Namer.system_message, ShotConfig.Namer.prompt)
+        elif shot_type == self.Avaiavable.summary:
+            super().__init__(ShotConfig.Summary.shots, ShotConfig.Summary.system_message, ShotConfig.Summary.prompt)
 
 
 class OpenAIClient:
@@ -69,6 +72,18 @@ class OpenAIClient:
             {"role": "user", "content": query},
             {"role": "assistant", "content": response}
         ]
+
+    def set_history(self, history:List[Dict[str, str]]):
+        self.history = history
+    
+    def wipe_history(self):
+        self.history = []
+    
+    def wipe_first_utterance(self):
+        self.history = self.history[2:]
+    
+    def get_history(self):
+        return self.history
 
     def completion(self, query: str, purpose:str, meta:str = "completion", temperature=0) -> str:
         messages = self.shot.messages(query, history=self.history)

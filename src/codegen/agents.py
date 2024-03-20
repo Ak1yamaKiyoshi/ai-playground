@@ -35,6 +35,10 @@ class NamerAgent(OpenAIAgent):
     def __init__(self) -> None:
         super().__init__(OpenAIAgent.Avaivable.namer)
 
+class SummaryAgent(OpenAIAgent):
+    def __init__(self) -> None:
+        super().__init__(OpenAIAgent.Avaivable.summary)
+
 class DebuggerAgent(OpenAIAgent):
     def __init__(self, code:str) -> None:
         super().__init__(OpenAIAgent.Avaivable.code_debug)
