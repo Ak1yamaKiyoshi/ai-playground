@@ -25,16 +25,18 @@ class Shot:
 
 
     def messages(self, query: str, history:List[Dict[str, str]]=[]) -> List[Dict[str, str]]:
+        
         message_shots = []
         for shot in self.shots:
-            message_shots += [self.__wrap("user", shot[0]),
+            message_shots += [self.__wrap("user", self.prompt + shot[0]),
             self.__wrap("assistant", shot[1])]
+
         
         messages = [
             self.__wrap("system", self.system_message),
             *message_shots,
             *history,
-            self.__wrap("user", query)
+            self.__wrap("user", self.prompt + query)
         ]
         return messages
 
@@ -42,22 +44,19 @@ class Shot:
 class PredefinedShot(Shot):
     class Avaiavable:
         code_generate = "gen"
-        code_debug = "debug"
-        console_action = "action"
         namer = "namer"
         summary ="summary"
+        analyst="analyst"
     
     def __init__(self, shot_type:str) -> None:
         if shot_type == self.Avaiavable.code_generate:
             super().__init__(ShotConfig.Coder.shots,   ShotConfig.Coder.system_message, ShotConfig.Coder.prompt)
-        elif shot_type == self.Avaiavable.code_debug:
-            super().__init__(ShotConfig.Debugger.shots, ShotConfig.Debugger.system_message, ShotConfig.Debugger.prompt)
-        elif shot_type == self.Avaiavable.console_action:
-            super().__init__(ShotConfig.Consoler.shots, ShotConfig.Consoler.system_message, ShotConfig.Consoler.prompt)
         elif shot_type == self.Avaiavable.namer:
             super().__init__(ShotConfig.Namer.shots, ShotConfig.Namer.system_message, ShotConfig.Namer.prompt)
         elif shot_type == self.Avaiavable.summary:
             super().__init__(ShotConfig.Summary.shots, ShotConfig.Summary.system_message, ShotConfig.Summary.prompt)
+        elif shot_type == self.Avaiavable.analyst:
+            super().__init__(ShotConfig.Analyst.shots, ShotConfig.Analyst.system_message, ShotConfig.Analyst.prompt)
 
 
 class OpenAIClient:
@@ -85,8 +84,9 @@ class OpenAIClient:
     def get_history(self):
         return self.history
 
-    def completion(self, query: str, purpose:str, meta:str = "completion", temperature=0) -> str:
+    def completion(self, query: str, purpose:str, meta:str = "completion", temperature=0, output_dir:str="./") -> str:
         messages = self.shot.messages(query, history=self.history)
+        
         try:
             in_tokens = PriceCounter.count_tokens_in_chat(messages)
         except:
@@ -108,8 +108,10 @@ class OpenAIClient:
         log_message = f" in: {in_tokens:4} | query: {query_tokens:4} | out: {out_tokens:4} | price ${round(price, 4):6} | total_price ${round(total_price, 4):6}"
         
         self.append_history(query, response)
-        
         Logger.log(purpose, log_message, purpose, time_taken, meta)
+        
+        with open(os.path.join(output_dir, purpose+".txt"), "w") as f:
+            f.write(response)
         
         return response
 

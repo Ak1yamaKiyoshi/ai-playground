@@ -10,7 +10,7 @@ import time
 import os
 from log_utils import Logger, PriceCounter
 from shots import Shot, PredefinedShot, OpenAIClient
-from agents import OpenAIAgent, CoderAgent, DebuggerAgent, ConsolerAgent, NamerAgent, SummaryAgent
+from agents import OpenAIAgent, CoderAgent, NamerAgent, SummaryAgent, AnalystAgent
 import shutil
 load_dotenv()
 
@@ -59,23 +59,19 @@ def minput(string:str):
     return "\n".join(contents)
 
 
-def code_gen_pipeline(query:str, meta:str, purpose:str, coder_agent:CoderAgent, namer_agent:NamerAgent):
-    date = time.strftime("%d.%m.%Y | %H:%M:%S")
-    response = coder_agent.invoke(query, "coder", meta, temperature=0.6)
-    name_response = namer_agent.invoke(response, "namer", 
-                                    meta, temperature=0.3)
-
-    name_response = preprocess_name(name_response)
-
-    code_response = response.split("```")[1].replace("```", "").replace("python\n", "")
-    
-    formatted_response = code2md_with_meta(meta, purpose, name_response, code_response)
-
-    # debug 
-    with open("./debug_history_coder.txt", "w") as f:
-        f.write("\n".join([str(entry) + "\n" for entry in coder_agent.history]))
-
-    # Saving 
+def invoke_coder(query:str, meta:str, purpose:str, coder_agent:CoderAgent):
+    retry = 3
+    while retry > 0:
+        try:
+            response = coder_agent.invoke(query, "coder", meta, temperature=0.5, output_dir=output_dir)
+            date = response.date
+            code = eval(response.response)['code']
+            filename =  eval(response.response)['filepath']
+            formatted_response = code2md_with_meta(meta, purpose, filename, code)
+            retry = 0
+        except:
+            print("retry...")
+            retry -= 1
     if not os.path.isfile(cached_filename):
         with open(cached_filename, "w+") as f:
             f.write(formatted_response)
@@ -83,18 +79,43 @@ def code_gen_pipeline(query:str, meta:str, purpose:str, coder_agent:CoderAgent, 
         with open(cached_filename, "a+") as f:
             f.write(formatted_response)
 
-    with open(os.path.join(output_dir, name_response), "w+") as f:
-        f.write(code_response)
-    
-    print(f"Code saved to {name_response}\n Check it and leave feedback. \n Date: {time.strftime('%d.%m.%Y %H:%M:%S')}")
+    try: os.makedirs(os.path.join(output_dir, os.path.join(filename.split("/")[:-1])), exist_ok=True)
+    except:pass
+    try: os.mkdir(os.path.join(output_dir, os.path.join(filename.split("/")[:-1])))
+    except:pass
+    filename = filename.split("/")[-1]
+    with open(os.path.join(output_dir, filename), "w+") as f:
+        f.write(code)
+
     return {
-        "filename": name_response,
+        "filename": filename,
         "meta": meta,
         "purpose": purpose,
-        "code": code_response,
-        "date": date
-        
+        "code": code,
+        "date": date   
     }
+
+
+def invoke_analyst(query:str, meta:str, analyst_agent:AnalystAgent, summary_history: List[str], consistent_requirement:str, code):
+    summary_history_str = "\n- ".join(summary_history)
+    query = f"""
+{consistent_requirement}
+```
+{minput(" > Feedback: ")}
+```
+ALREADY TRIED SOLUTIONS OR COMMANDS:
+```
+{summary_history_str}
+```
+CODE:
+```py
+{code}
+```
+"""
+
+    query = query.replace("STOP", "")
+    query = analyst_agent.invoke(query, "analyst", meta, temperature=0.5, output_dir=output_dir).response
+    return query 
 
 
 def save_as_dialog(res, query, date_user:str, uid:int, summary:str):
@@ -121,17 +142,25 @@ def save_as_dialog(res, query, date_user:str, uid:int, summary:str):
         f.write(ai_response)
 
 
-def pipeline(query:str, meta:str, purpose:str, always_to_add:str,
-             coder_agent: CoderAgent, namer_agent: NamerAgent, summary_agent: SummaryAgent):
+def invoke_summarizer(res, meta:str, summary_list:List[str], summarizer_agent:SummaryAgent):
+    summary_list.append( summarizer_agent.invoke(res["code"], "summary", meta, temperature=0.5, output_dir=output_dir).response)
+    return summary_list[-1]
+
+def pipeline(meta:str, purpose:str, always_to_add:str,
+             coder_agent: CoderAgent, namer_agent: NamerAgent, summary_agent: SummaryAgent,
+             analyst_agent: AnalystAgent):
     uid = 0
-    date_user = time.strftime("%d.%m.%Y | %H:%M:%S")
     summary_history = []
+    code = ""
+    query = ""
     while True:
-        res = code_gen_pipeline(query, meta, purpose, coder_agent, namer_agent)
+        date_user = time.strftime("%d.%m.%Y | %H:%M:%S")
+        query =   invoke_analyst(query, meta, analyst_agent, summary_history, always_to_add, code)
+        res    =  invoke_coder(query, meta, purpose, coder_agent)
+        summary = invoke_summarizer(res, meta, summary_history, summary_agent)
+        code = res['code']
+        save_as_dialog(res, query, date_user, uid, summary)
     
-        summary = summary_agent.invoke(res["code"], "summary", meta, temperature=0.5)
-        summary_history.append(summary)
-        summary_history_str = "\n- ".join(summary_history)
         
         if PriceCounter.count_tokens_in_chat(coder_agent.get_history()) > 4000:
             coder_agent.wipe_first_utterance()
@@ -139,27 +168,21 @@ def pipeline(query:str, meta:str, purpose:str, always_to_add:str,
             namer_agent.wipe_first_utterance()
         if PriceCounter.count_tokens_in_chat(summary_agent.get_history()) > 4000:
             summary_agent.wipe_first_utterance()
+        if PriceCounter.count_tokens_in_chat(analyst_agent.get_history()) > 9000:
+            analyst_agent.wipe_first_utterance()
         
-        save_as_dialog(res, query, date_user, uid, summary)
-
-        query = f"""
-{always_to_add}
-- COMMAND YOU MUST EXECUTE OR ERROR YOU MUST FIX:
-```
-{minput(" > Feedback: ")}
-```
-- ALREADY TRIED SOLUTIONS OR COMMANDS:
-{summary_history_str}
-"""
-        query = query.replace("STOP", "")
-
-        date_user = time.strftime("%d.%m.%Y | %H:%M:%S")
+        print(f"Code saved to {res['filename']}\n Check it and leave feedback. \n Date: {time.strftime('%d.%m.%Y %H:%M:%S')}")
+        
+        
         print("Running new query. \n")
         uid += 1
 
 
-# Will be used as promptp for each iteration
+
+# Will be added to prompt for each iteration
 consistent_prompt = """
+IMPLEMENT EVERYTHING: 
+
 You are not allowed to use cv trackers or any deeplearning solutions.
 Take to attention feedback, and do not reimplement banned solutions.
 No yapping and comments.
@@ -180,15 +203,33 @@ if __name__ == "__main__":
 ```
 """
 
-first_query = f"""I want to track object on video using lucas kanade algorithm.
-Divide algorythm in two stages: 
-1. You should implement object detection with background substractors and kalman filter, output of that, when object is deteccted should be bounding boxes, or BBOX in other words. 
-2. After that, you need to track that BBOX from previous step with lucas kanade filter. 
-3. If BBOX's cound == 0 you should return to the first step 
-{consistent_prompt}
-"""
 
 coder = CoderAgent()
 namer = NamerAgent()
 summarizer = SummaryAgent()
-pipeline(first_query, "opencv-gen-test", "coder", consistent_prompt, coder, namer, summarizer)
+analyst = AnalystAgent()
+pipeline("opencv-gen-test", "coder", consistent_prompt, coder, namer, summarizer, analyst)
+
+
+
+
+""" 
+pipeline:
+do:
+  -- Decisionmaking: 
+  Analyst outputs [requirements list, user task (feedback)]
+  Decisionmaker outputs [   
+    action: wipe out memory for coder | analyst | do not wipe out memory 
+    idea: stick to the current solution, or new solution general idea
+    details: plan what to do and what to update
+  ]
+  -- File managing: 
+  Coder outputs [code, path_filename]
+    Summarizer outputs what coder did
+  User runs the thing.
+while (money on account)
+  
+  
+  чел який буде по директоріям все розкидувати -> Анатолій
+"""
+# Писати diff файли замість повних файліх

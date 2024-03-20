@@ -15,6 +15,24 @@ import os
 
 load_dotenv()
 
+class AgentResponse:
+    def __init__(self, response:str, purpose:str) -> None:
+        self.response = response
+        self.date = time.strftime("%d.%m.%Y | %H:%M:%S")
+        self.purpose = purpose
+        self.dict = {
+            "response": response,
+            "date": self.date,
+            "purpose": purpose
+        }
+        
+        
+    def __str__(self) -> str:
+        return self.response
+    
+    def __repr__(self) -> str:
+        return self.response
+
 
 class OpenAIAgent(OpenAIClient):
     Avaivable = PredefinedShot.Avaiavable
@@ -22,9 +40,9 @@ class OpenAIAgent(OpenAIClient):
     def __init__(self, agent_type) -> None:
         super().__init__(PredefinedShot(agent_type))
     
-    def invoke(self, query:str, purpose:str, meta:str, temperature:int=0.5):
-        response = self.completion(query, purpose, meta, temperature)
-        return response
+    def invoke(self, query:str, purpose:str, meta:str, temperature:int=0.5, output_dir:str="./"):
+        response = self.completion(query, purpose, meta, temperature, output_dir)
+        return AgentResponse(response, purpose)
 
         
 class CoderAgent(OpenAIAgent):
@@ -39,52 +57,6 @@ class SummaryAgent(OpenAIAgent):
     def __init__(self) -> None:
         super().__init__(OpenAIAgent.Avaivable.summary)
 
-class DebuggerAgent(OpenAIAgent):
-    def __init__(self, code:str) -> None:
-        super().__init__(OpenAIAgent.Avaivable.code_debug)
-        self.code = code
-        self.max_retries = 3
-
-
-    def get_errors(self):
-        stdout_orig = sys.stdout
-        stderr_orig = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
-
-        try:
-            eval(self.code)
-        finally:
-            stdout_output = sys.stdout.getvalue()
-            stderr_output = sys.stderr.getvalue()
-            sys.stdout = stdout_orig
-            sys.stderr = stderr_orig
-
-        return stdout_output, stderr_output
-
-
-    def save_code_history(self):
-        # ShotConfig.Debugger.history_dir
-        # Todo save code to history file in md format 
-        pass 
-
-
-    def invoke(self):
-        retries = 0
-        while self.max_retries > retries:
-            self.save_code_history()
-            stdout, stderr = self.get_errors()
-            if stderr:
-                retries += 1
-                # Todo: add metadata as filetree 
-                self.code = self.completion(self.code + "\n" + stderr + stdout)
-            else: break
-        return self.code
-
-
-class ConsolerAgent(OpenAIAgent):
+class AnalystAgent(OpenAIAgent):
     def __init__(self) -> None:
-        super().__init__(OpenAIAgent.Avaivable.console_action)
-
-
-# Add to config input dir
+        super().__init__(OpenAIAgent.Avaivable.analyst)
