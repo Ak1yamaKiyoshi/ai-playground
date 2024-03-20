@@ -7016,3 +7016,1617 @@ if __name__ == "__main__":
             traceback.print_exc()
 
 ```
+# track_object.py
+### Date: 20.03.2024-19:14:22
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, background_subtractor, kalman_filter):
+    fg_mask = background_subtractor.apply(frame)
+    fg_mask[fg_mask < 250] = 0
+
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) == 0:
+        return None
+    
+    x, y, w, h = cv2.boundingRect(contours[0])
+    bbox = (x, y, w, h)
+    
+    kalman_filter.correct((x + w / 2, y + h / 2))
+    
+    return bbox
+
+def track_bbox(frame, bbox):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    
+    hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    roi_hist = cv2.calcHist([hsv_roi], [0], None, [180], [0, 180])
+    cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
+    
+    term_criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
+    
+    while True:
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+        
+        _, bbox = cv2.CamShift(dst, (x, y, w, h), term_criteria)
+        
+        x, y, w, h = bbox
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    background_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+    kalman_filter.processNoiseCov = 0.01 * np.eye(4, dtype=np.float32)
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, background_subtractor, kalman_filter)
+        else:
+            track_bbox(frame, bbox)
+            
+            if bbox is None:
+                bbox = detect_object(frame, background_subtractor, kalman_filter)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+```
+# track_obj_detect.py
+### Date: 20.03.2024-19:16:32
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, background_subtractor, kalman_filter):
+    fg_mask = background_subtractor.apply(frame)
+    fg_mask[fg_mask < 250] = 0
+
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) == 0:
+        return None
+    
+    x, y, w, h = cv2.boundingRect(contours[0])
+    bbox = (x, y, w, h)
+    
+    kalman_filter.correct(np.array([[x + w / 2], [y + h / 2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    
+    hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    roi_hist = cv2.calcHist([hsv_roi], [0], None, [180], [0, 180])
+    cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
+    
+    term_criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
+    
+    while True:
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+        
+        ret, bbox = cv2.CamShift(dst, (x, y, w, h), term_criteria)
+        
+        pts = cv2.boxPoints(ret)
+        pts = np.int0(pts)
+        cv2.polylines(frame, [pts], True, (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    background_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+    kalman_filter.processNoiseCov = 0.01 * np.eye(4, dtype=np.float32)
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, background_subtractor, kalman_filter)
+        else:
+            track_bbox(frame, bbox)
+            
+            if bbox is None:
+                bbox = detect_object(frame, background_subtractor, kalman_filter)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+```
+# track_object.py
+### Date: 20.03.2024-19:18:35
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame, p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# object_track.py
+### Date: 20.03.2024-19:19:36
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# object_tracking.py
+### Date: 20.03.2024-19:20:46
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# obj_track.py
+### Date: 20.03.2024-19:21:41
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# obj_track_system.py
+### Date: 20.03.2024-19:22:28
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# obj_track_system.py
+### Date: 20.03.2024-19:23:18
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# obj_track_system.py
+### Date: 20.03.2024-19:23:50
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# obj_track_system.py
+### Date: 20.03.2024-19:24:49
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    bbox = None
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(max_contour)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([[x + w/2], [y + h/2]], dtype=np.float32))
+    
+    return bbox
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = p0.reshape(-1, 1, 2)
+        
+        p1, st = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        good_new = p1[st == 1]
+        good_old = p0[st == 1]
+        
+        if len(good_new) > 0:
+            bbox = (x + int(np.mean(good_new[:, 0]) - w/2), y + int(np.mean(good_new[:, 1]) - h/2), w, h)
+        else:
+            bbox = None
+    else:
+        bbox = None
+    
+    return bbox
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                               [0, 1, 0, 1],
+                                               [0, 0, 1, 0],
+                                               [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                               [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.array([[1, 0, 0, 0],
+                                             [0, 1, 0, 0],
+                                             [0, 0, 1, 0],
+                                             [0, 0, 0, 1]], np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.array([[1, 0],
+                                                 [0, 1]], np.float32) * 0.1
+    kalman_filter.errorCovPost = np.array([[1, 0, 0, 0],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]], np.float32)
+    
+    lk_params = dict(winSize=(15, 15),
+                    maxLevel=2,
+                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+        
+        if bbox is None:
+            bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    import os
+    import traceback
+    
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# track_object.py
+### Date: 20.03.2024-19:27:00
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    fg_mask[fg_mask < 100] = 0
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) > 0:
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct((x + w/2, y + h/2))
+        return bbox
+    else:
+        return None
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, **lk_params)
+    
+    if p0 is not None:
+        p0 = np.float32(p0).reshape(-1, 1, 2)
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame, p0, None, **lk_params)
+        p1 = p1[st == 1]
+        p0 = p0[st == 1]
+        
+        dx = np.mean(p1[:, 0, 0] - p0[:, 0, 0])
+        dy = np.mean(p1[:, 0, 1] - p0[:, 0, 1])
+        bbox = (x + int(dx), y + int(dy), w, h)
+        
+        return bbox
+    else:
+        return None
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                                [0, 1, 0, 1],
+                                                [0, 0, 1, 0],
+                                                [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                                [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.1
+    
+    lk_params = dict(winSize=(15, 15),
+                     maxLevel=2,
+                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+            
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+import os
+from typing import List
+import traceback
+
+if __name__ == "__main__":
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# track_object.py
+### Date: 20.03.2024-19:27:40
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    fg_mask[fg_mask < 100] = 0
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) > 0:
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([x + w/2, y + h/2], dtype=np.float32))
+        return bbox
+    else:
+        return None
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    p0 = cv2.goodFeaturesToTrack(roi_gray, mask=None, **lk_params)
+    
+    if p0 is not None:
+        p0 = np.float32(p0).reshape(-1, 1, 2)
+        p1, _, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame, p0, None, **lk_params)
+        p1 = p1.reshape(-1, 2)
+        
+        dx = np.mean(p1[:, 0] - p0[:, 0, 0])
+        dy = np.mean(p1[:, 1] - p0[:, 0, 1])
+        bbox = (x + int(dx), y + int(dy), w, h)
+        
+        return bbox
+    else:
+        return None
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                                [0, 1, 0, 1],
+                                                [0, 0, 1, 0],
+                                                [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                                [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.1
+    
+    lk_params = dict(winSize=(15, 15),
+                     maxLevel=2,
+                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+            
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+import os
+import traceback
+
+if __name__ == "__main__":
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# track_obj_detect.py
+### Date: 20.03.2024-19:28:20
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    fg_mask[fg_mask < 100] = 0
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) > 0:
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([x + w/2, y + h/2], dtype=np.float32))
+        return bbox
+    else:
+        return None
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    p0 = cv2.goodFeaturesToTrack(roi_gray, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = np.float32(p0).reshape(-1, 1, 2)
+        p1, _, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame, p0, None, **lk_params)
+        p1 = p1.reshape(-1, 2)
+        
+        dx = np.mean(p1[:, 0] - p0[:, 0, 0])
+        dy = np.mean(p1[:, 1] - p0[:, 0, 1])
+        bbox = (x + int(dx), y + int(dy), w, h)
+        
+        return bbox
+    else:
+        return None
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                                [0, 1, 0, 1],
+                                                [0, 0, 1, 0],
+                                                [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                                [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.1
+    
+    lk_params = dict(winSize=(15, 15),
+                     maxLevel=2,
+                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+            
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+import os
+import traceback
+
+if __name__ == "__main__":
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# track_obj_detect.py
+### Date: 20.03.2024-19:29:33
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    fg_mask[fg_mask < 100] = 0
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) > 0:
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([x + w/2, y + h/2], dtype=np.float32))
+        return bbox
+    else:
+        return None
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = np.float32(p0).reshape(-1, 1, 2)
+        
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        p1 = p1[st == 1]
+        p0 = p0[st == 1]
+        
+        dx = np.mean(p1[:, 0, 0] - p0[:, 0, 0])
+        dy = np.mean(p1[:, 0, 1] - p0[:, 0, 1])
+        bbox = (x + int(dx), y + int(dy), w, h)
+        
+        return bbox
+    else:
+        return None
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                                [0, 1, 0, 1],
+                                                [0, 0, 1, 0],
+                                                [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                                [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.1
+    
+    lk_params = dict(winSize=(15, 15),
+                     maxLevel=2,
+                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+            
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+import os
+import traceback
+
+if __name__ == "__main__":
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```
+# track_obj_detect.py
+### Date: 20.03.2024-19:31:33
+### Meta: opencv-gen-test
+### Purpose: coder
+```py
+import cv2
+import numpy as np
+
+def detect_object(frame, bg_subtractor, kalman_filter):
+    fg_mask = bg_subtractor.apply(frame)
+    fg_mask[fg_mask < 100] = 0
+    
+    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if len(contours) > 0:
+        cnt = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(cnt)
+        bbox = (x, y, w, h)
+        
+        kalman_filter.correct(np.array([x + w/2, y + h/2], dtype=np.float32))
+        return bbox
+    else:
+        return None
+
+def track_bbox(frame, bbox, lk_params):
+    x, y, w, h = bbox
+    roi = frame[y:y+h, x:x+w]
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    
+    p0 = cv2.goodFeaturesToTrack(roi_gray, maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    if p0 is not None:
+        p0 = np.float32(p0).reshape(-1, 1, 2)
+        
+        p1, st, _ = cv2.calcOpticalFlowPyrLK(roi_gray, frame[y:y+h, x:x+w], p0, None, **lk_params)
+        
+        p1 = p1[st == 1]
+        p0 = p0[st == 1]
+        
+        dx = np.mean(p1[:, 0, 0] - p0[:, 0, 0])
+        dy = np.mean(p1[:, 0, 1] - p0[:, 0, 1])
+        bbox = (x + int(dx), y + int(dy), w, h)
+        
+        return bbox
+    else:
+        return None
+
+def track(video_path):
+    cap = cv2.VideoCapture(video_path)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+    kalman_filter = cv2.KalmanFilter(4, 2)
+    kalman_filter.transitionMatrix = np.array([[1, 0, 1, 0],
+                                                [0, 1, 0, 1],
+                                                [0, 0, 1, 0],
+                                                [0, 0, 0, 1]], np.float32)
+    kalman_filter.measurementMatrix = np.array([[1, 0, 0, 0],
+                                                [0, 1, 0, 0]], np.float32)
+    kalman_filter.processNoiseCov = np.eye(4, dtype=np.float32) * 0.03
+    kalman_filter.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.1
+    
+    lk_params = dict(winSize=(15, 15),
+                     maxLevel=2,
+                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    
+    bbox = None
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        else:
+            bbox = track_bbox(frame, bbox, lk_params)
+            
+        if bbox is None:
+            bbox = detect_object(frame, bg_subtractor, kalman_filter)
+        
+        if bbox is not None:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('Object Tracking', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()
+
+import os
+import traceback
+
+if __name__ == "__main__":
+    videos = []
+    for path in os.listdir("./assets"):
+        if path.endswith(".mp4"):
+            videos.append(os.path.join("./assets", path))
+    for video in sorted(videos):
+        try:
+            track(video)
+        except:
+            traceback.print_exc()
+
+```

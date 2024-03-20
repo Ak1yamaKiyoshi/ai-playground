@@ -131,23 +131,24 @@ def pipeline(query:str, meta:str, purpose:str, always_to_add:str,
     
         summary = summary_agent.invoke(res["code"], "summary", meta, temperature=0.5)
         summary_history.append(summary)
-        summary_history_str = "\n- YOU ARE BANNED FROM IMPLEMENTING: ".join(summary_history)
+        summary_history_str = "\n- ".join(summary_history)
         
         if PriceCounter.count_tokens_in_chat(coder_agent.get_history()) > 4000:
             coder_agent.wipe_first_utterance()
         if PriceCounter.count_tokens_in_chat(namer_agent.get_history()) > 4000:
             namer_agent.wipe_first_utterance()
+        if PriceCounter.count_tokens_in_chat(summary_agent.get_history()) > 4000:
+            summary_agent.wipe_first_utterance()
         
         save_as_dialog(res, query, date_user, uid, summary)
 
         query = f"""
 {always_to_add}
-- COMMAND YOU MUST EXECUTE:
+- COMMAND YOU MUST EXECUTE OR ERROR YOU MUST FIX:
 ```
 {minput(" > Feedback: ")}
 ```
-
-- ALREADY TRIED SOLUTIONS COMMANDS:
+- ALREADY TRIED SOLUTIONS OR COMMANDS:
 {summary_history_str}
 """
         query = query.replace("STOP", "")
@@ -163,9 +164,10 @@ You are not allowed to use cv trackers or any deeplearning solutions.
 Take to attention feedback, and do not reimplement banned solutions.
 No yapping and comments.
 Using ROI selection are banned too.
+Use this as starting code:
 ```py
 import os
-from typigng import List
+from typing import List
 import traceback
 if __name__ == "__main__":
     videos=[]
